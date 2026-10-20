@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Allows manually triggering this script.
+  workflow_dispatch:
+    inputs:
+      upload-to-nuget:
+        description: 'Upload to NuGet.org (main only)'
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  test:
+    name: Test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, windows-2025, macos-26]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up dotnet
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+        # Builds throwaway mods against fake RimWorld folders made from RimRef packages.
+      - name: Test
+        run: dotnet test --project tests/RimRefLocal.Tests
+
+  pack:
+    name: Pack
+    needs: test
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      # For trusted publishing: lets NuGet/login trade a GitHub token for a short-lived NuGet API key.
+      id-token: write
+    steps:
+
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up dotnet
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Pack
+        run: dotnet pack src/Krafs.Rimworld.Ref.Local.nuspec --output artifacts
+
+      - name: Upload GitHub artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: krafs.rimworld.ref.local.nupkg
+          path: artifacts/*.nupkg
+          retention-days: 7
+
+      - name: Log in to NuGet.org
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: krafs
+        if: inputs.upload-to-nuget && github.ref == 'refs/heads/main'
+
+        # Fails if the version already exists, so a forgotten version bump in the nuspec doesn't pass silently.
+      - name: Upload to NuGet.org
+        run: dotnet nuget push artifacts/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        if: inputs.upload-to-nuget && github.ref == 'refs/heads/main'

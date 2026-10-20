@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>Krafs.Rimworld.Ref.Local</id>
+    <version>1.0.0</version>
+    <authors>krafs</authors>
+    <description>Use alongside Krafs.Rimworld.Ref: in Debug builds, compiles your mod against your installed RimWorld when the versions match, so your IDE shows the game's real code.</description>
+    <license type="expression">MIT</license>
+    <projectUrl>https://github.com/krafs/RimRefLocal</projectUrl>
+    <repository type="git" url="https://github.com/krafs/RimRefLocal.git" />
+    <readme>README.md</readme>
+    <tags>Rimworld Mod</tags>
+    <developmentDependency>true</developmentDependency>
+  </metadata>
+  <files>
+    <file src="build/Krafs.Rimworld.Ref.Local.targets" target="build/" />
+    <file src="../README.md" target="" />
+  </files>
+</package>

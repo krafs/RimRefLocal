@@ -1,0 +1,116 @@
+<Project>
+
+  <!--
+    Krafs.Rimworld.Ref.Local - https://github.com/krafs/RimRefLocal
+
+    Use alongside Krafs.Rimworld.Ref: in Debug builds, compiles your mod against your installed RimWorld when the versions match, so your IDE shows the game's real code.
+
+    Reference the Krafs.Rimworld.Ref.Local package, or save this file as Directory.Build.targets next to your .csproj or in any parent folder.
+    RimWorld is found above your project (e.g. RimWorld/Mods/MyMod/Source) or through Steam.
+    Elsewhere, set RimWorldDirectory in your project, a Directory.Build.props or an environment variable.
+    Set UseLocalRimWorldAssemblies to true or false to override the Debug-only default.
+    Set UseStrictRimWorldVersionComparison to false to also use your RimWorld when only the minor version matches, e.g. 1.6.
+  -->
+
+  <PropertyGroup>
+    <UseLocalRimWorldAssemblies Condition="'$(UseLocalRimWorldAssemblies)' == '' and '$(Configuration)' == 'Debug'">true</UseLocalRimWorldAssemblies>
+    <RimWorldDirectory Condition="'$(RimWorldDirectory)' == ''">$([MSBuild]::GetDirectoryNameOfFileAbove('$(MSBuildProjectDirectory)', 'ModUpdating.txt'))</RimWorldDirectory>
+  </PropertyGroup>
+
+  <Target Name="UseLocalRimWorldAssemblies" AfterTargets="ResolveLockFileReferences" BeforeTargets="ResolveAssemblyReferences" Condition="'$(UseLocalRimWorldAssemblies)' == 'true'">
+    <ItemGroup>
+      <_RimRefAssemblyCSharp Include="@(Reference->WithMetadataValue('NuGetPackageId', 'Krafs.Rimworld.Ref')->WithMetadataValue('Filename', 'Assembly-CSharp'))" />
+    </ItemGroup>
+
+    <PropertyGroup Condition="'@(_RimRefAssemblyCSharp)' != ''">
+      <_RimWorldDirectory>$(RimWorldDirectory)</_RimWorldDirectory>
+      <_RimWorldSteamDirectory Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(Registry:HKEY_CURRENT_USER\Software\Valve\Steam@SteamPath)</_RimWorldSteamDirectory>
+      <_RimWorldSteamDirectory Condition="$([MSBuild]::IsOSPlatform('Linux'))">$(HOME)/.steam/root</_RimWorldSteamDirectory>
+      <_RimWorldSteamDirectory Condition="$([MSBuild]::IsOSPlatform('Linux')) and !Exists('$(_RimWorldSteamDirectory)')">$(HOME)/.local/share/Steam</_RimWorldSteamDirectory>
+      <_RimWorldSteamDirectory Condition="$([MSBuild]::IsOSPlatform('Linux')) and !Exists('$(_RimWorldSteamDirectory)')">$(HOME)/.var/app/com.valvesoftware.Steam/.local/share/Steam</_RimWorldSteamDirectory>
+      <_RimWorldSteamDirectory Condition="$([MSBuild]::IsOSPlatform('OSX'))">$(HOME)/Library/Application Support/Steam</_RimWorldSteamDirectory>
+      <_RimWorldSteamLibraryFolders>$(_RimWorldSteamDirectory)/steamapps/libraryfolders.vdf</_RimWorldSteamLibraryFolders>
+    </PropertyGroup>
+
+    <!-- Steam's library list names the library that has RimWorld (app 294100). -->
+    <ReadLinesFromFile File="$(_RimWorldSteamLibraryFolders)" Condition="'$(_RimWorldDirectory)' == '' and Exists('$(_RimWorldSteamLibraryFolders)')">
+      <Output TaskParameter="Lines" ItemName="_RimWorldSteamLibraryFoldersLine" />
+    </ReadLinesFromFile>
+
+    <PropertyGroup Condition="'@(_RimWorldSteamLibraryFoldersLine)' != ''">
+      <_RimWorldSteamLibraryFoldersText>@(_RimWorldSteamLibraryFoldersLine, '%0A')</_RimWorldSteamLibraryFoldersText>
+      <_RimWorldSteamLibrary>$([System.Text.RegularExpressions.Regex]::Match('$(_RimWorldSteamLibraryFoldersText)', '"path"\s+"([^"]+)"[^{}]+"apps"\s+\{[^}]*\n\s*"294100"').Groups[1].Value)</_RimWorldSteamLibrary>
+      <_RimWorldSteamLibrary>$(_RimWorldSteamLibrary.Replace('\\', '\'))</_RimWorldSteamLibrary>
+      <_RimWorldDirectory Condition="'$(_RimWorldSteamLibrary)' != ''">$(_RimWorldSteamLibrary)/steamapps/common/RimWorld</_RimWorldDirectory>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(_RimWorldDirectory)' != ''">
+      <_RimWorldDirectory>$([MSBuild]::EnsureTrailingSlash('$(_RimWorldDirectory)'))</_RimWorldDirectory>
+    </PropertyGroup>
+
+    <!-- 1.7+ keeps assemblies in the game folder, earlier versions in *_Data/Managed, or on macOS in RimWorldMac.app, which is also where its Mods folder is. -->
+    <ItemGroup Condition="'$(_RimWorldDirectory)' != ''">
+      <_RimWorldAssemblyCSharp Include="$(_RimWorldDirectory)Assembly-CSharp.dll" Condition="Exists('$(_RimWorldDirectory)Assembly-CSharp.dll')" />
+      <_RimWorldAssemblyCSharp Include="$(_RimWorldDirectory)*_Data/Managed/Assembly-CSharp.dll" />
+      <_RimWorldAssemblyCSharp Include="$(_RimWorldDirectory)*.app/Contents/Resources/Data/Managed/Assembly-CSharp.dll" />
+      <_RimWorldAssemblyCSharp Include="$(_RimWorldDirectory)Contents/Resources/Data/Managed/Assembly-CSharp.dll" Condition="Exists('$(_RimWorldDirectory)Contents/Resources/Data/Managed/Assembly-CSharp.dll')" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <!-- Old Windows installs can have both RimWorldWin_Data and RimWorldWin64_Data; they hold the same assemblies. -->
+      <_RimWorldManagedDirectories>@(_RimWorldAssemblyCSharp->'%(RootDir)%(Directory)')</_RimWorldManagedDirectories>
+      <_RimWorldManagedDirectory>$(_RimWorldManagedDirectories.Split(';')[0])</_RimWorldManagedDirectory>
+    </PropertyGroup>
+
+    <!-- Assembly-CSharp's version is stamped when it's compiled, so equal versions mean the same build. -->
+    <GetAssemblyIdentity AssemblyFiles="@(_RimRefAssemblyCSharp)" Condition="'@(_RimWorldAssemblyCSharp)' != ''">
+      <Output TaskParameter="Assemblies" PropertyName="_RimRefIdentity" />
+    </GetAssemblyIdentity>
+    <GetAssemblyIdentity AssemblyFiles="$(_RimWorldManagedDirectory)Assembly-CSharp.dll" Condition="'$(_RimRefIdentity)' != ''">
+      <Output TaskParameter="Assemblies" PropertyName="_RimWorldIdentity" />
+    </GetAssemblyIdentity>
+
+    <!--
+      Before 1.7, each platform has its own build of the game, and RimRef has the 64-bit Windows one. The others have nearly
+      the same API, so there the same game version is enough. Without strict comparison, the same minor version is enough.
+    -->
+    <PropertyGroup>
+      <_RimWorldVersionFieldCount>3</_RimWorldVersionFieldCount>
+      <_RimWorldVersionFieldCount Condition="'$(UseStrictRimWorldVersionComparison)' == 'false'">2</_RimWorldVersionFieldCount>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(_RimWorldIdentity)' != '' and '$(_RimRefIdentity)' != '$(_RimWorldIdentity)' and ('$(TargetFrameworkIdentifier)' == '.NETFramework' or '$(_RimWorldVersionFieldCount)' == '2')">
+      <_RimWorldVersionFile>$([MSBuild]::GetPathOfFileAbove('Version.txt', '$(_RimWorldManagedDirectory)'))</_RimWorldVersionFile>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(_RimWorldVersionFile)" Condition="'$(_RimWorldVersionFile)' != ''">
+      <Output TaskParameter="Lines" ItemName="_RimWorldVersionLine" />
+    </ReadLinesFromFile>
+    <PropertyGroup Condition="'@(_RimWorldVersionLine)' != ''">
+      <_RimWorldVersion>@(_RimWorldVersionLine)</_RimWorldVersion>
+      <_RimWorldVersion>$(_RimWorldVersion.Split(' ')[0])</_RimWorldVersion>
+      <_RimWorldVersion>$([System.Version]::Parse('$(_RimWorldVersion)').ToString($(_RimWorldVersionFieldCount)))</_RimWorldVersion>
+      <_RimRefVersion>@(_RimRefAssemblyCSharp->'%(NuGetPackageVersion)')</_RimRefVersion>
+      <_RimRefVersion>$(_RimRefVersion.Split('-')[0])</_RimRefVersion>
+      <_RimRefVersion>$([System.Version]::Parse('$(_RimRefVersion)').ToString($(_RimWorldVersionFieldCount)))</_RimRefVersion>
+    </PropertyGroup>
+
+    <PropertyGroup>
+      <_UseRimWorldAssemblies Condition="'$(_RimRefIdentity)' != '' and '$(_RimRefIdentity)' == '$(_RimWorldIdentity)'">true</_UseRimWorldAssemblies>
+      <_UseRimWorldAssemblies Condition="'$(_RimWorldVersion)' != '' and '$(_RimWorldVersion)' == '$(_RimRefVersion)'">true</_UseRimWorldAssemblies>
+    </PropertyGroup>
+
+    <!-- Take file names from HintPath: before 1.7, the SDK merges mscorlib, System etc. into the implicit framework references, named without .dll. -->
+    <ItemGroup Condition="'$(_UseRimWorldAssemblies)' == 'true'">
+      <Reference Condition="'%(Reference.NuGetPackageId)' == 'Krafs.Rimworld.Ref'">
+        <_RimWorldAssemblyPath>$(_RimWorldManagedDirectory)$([System.IO.Path]::GetFileName('%(Reference.HintPath)'))</_RimWorldAssemblyPath>
+      </Reference>
+      <Reference Condition="'%(Reference._RimWorldAssemblyPath)' != '' and Exists('%(Reference._RimWorldAssemblyPath)')">
+        <HintPath>%(Reference._RimWorldAssemblyPath)</HintPath>
+      </Reference>
+    </ItemGroup>
+
+    <Message Importance="high" Condition="'$(_UseRimWorldAssemblies)' == 'true'" Text="Using RimWorld's assemblies from $(_RimWorldManagedDirectory)" />
+    <Message Importance="high" Condition="'@(_RimRefAssemblyCSharp)' != '' and '@(_RimWorldAssemblyCSharp)' == ''" Text="Using Krafs.Rimworld.Ref: RimWorld not found" />
+    <Message Importance="high" Condition="'@(_RimWorldAssemblyCSharp)' != '' and '$(_UseRimWorldAssemblies)' != 'true'" Text="Using Krafs.Rimworld.Ref: $(_RimWorldDirectory) has another game build" />
+  </Target>
+
+</Project>

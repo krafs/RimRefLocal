@@ -1,0 +1,29 @@
+version: 2
+
+# Monthly, one grouped PR per ecosystem, and only versions that are at least a week old, so a broken release
+# has time to be pulled. Security updates don't wait for the schedule.
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "nuget"
+    directory: "/tests/RimRefLocal.Tests"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 7
+    groups:
+      nuget:
+        patterns:
+          - "*"
+    # The fake RimWorld folders are made from these exact versions.
+    ignore:
+      - dependency-name: "Krafs.Rimworld.Ref"

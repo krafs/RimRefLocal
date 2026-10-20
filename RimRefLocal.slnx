@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <File Path="src/Krafs.Rimworld.Ref.Local.nuspec" />
+    <File Path="src/build/Krafs.Rimworld.Ref.Local.targets" />
+  </Folder>
+  <Project Path="tests/RimRefLocal.Tests/RimRefLocal.Tests.csproj" />
+</Solution>
