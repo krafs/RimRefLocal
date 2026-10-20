@@ -9,11 +9,13 @@
     <projectUrl>https://github.com/krafs/RimRefLocal</projectUrl>
     <repository type="git" url="https://github.com/krafs/RimRefLocal.git" />
     <readme>README.md</readme>
+    <icon>icon.png</icon>
     <tags>Rimworld Mod</tags>
     <developmentDependency>true</developmentDependency>
   </metadata>
   <files>
     <file src="build/Krafs.Rimworld.Ref.Local.targets" target="build/" />
     <file src="../README.md" target="" />
+    <file src="icon.png" target="" />
   </files>
 </package>
